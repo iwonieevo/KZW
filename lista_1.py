@@ -120,12 +120,9 @@ best_solution = [None, float('inf')]
 def carlier(tasks: list[Task], UB: int) -> tuple[list[Task], int]:
     pi, U = schrage(tasks)
     
-    if U < UB:
-        UB = U
+    if U < best_solution[1]:
         best_solution[0] = pi[:]
         best_solution[1] = U
-    else:
-        return best_solution[0], best_solution[1]
     
     sched = Schedule(pi)
     sched.compute()
@@ -138,7 +135,7 @@ def carlier(tasks: list[Task], UB: int) -> tuple[list[Task], int]:
     a = -1
     for j in range(b + 1):
         p_sum = sum(pi[k].processing_time for k in range(j, b + 1))
-        if sched.cmax - pi[j].release_time >= p_sum + pi[b].delivery_time:
+        if sched.cmax == pi[j].release_time + p_sum + pi[b].delivery_time:
             a = j
             break
     
@@ -164,9 +161,9 @@ def carlier(tasks: list[Task], UB: int) -> tuple[list[Task], int]:
     
     _, LB = preemptive_schrage(pi)
     
-    if LB < UB:
-        carlier(pi, UB)
-    
+    if LB < best_solution[1]:
+        carlier(pi, best_solution[1])
+        
     pi[c].release_time = old_r
     
     old_q = pi[c].delivery_time
@@ -174,9 +171,9 @@ def carlier(tasks: list[Task], UB: int) -> tuple[list[Task], int]:
     
     _, LB = preemptive_schrage(pi)
     
-    if LB < UB:
-        carlier(pi, UB)
-    
+    if LB < best_solution[1]:
+        carlier(pi, best_solution[1])
+        
     pi[c].delivery_time = old_q
     
     return best_solution[0], best_solution[1]
