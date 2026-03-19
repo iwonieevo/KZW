@@ -155,3 +155,70 @@ if __name__ == '__main__':
         print(t)
 
     
+def preemptive_schrage(tasks: list[Task]) -> tuple[list[Task], int]:
+    # to be commited
+    return [], 0
+
+
+best_solution = [None, float('inf')]
+
+def carlier(tasks: list[Task], UB: int) -> tuple[list[Task], int]:
+    pi, U = schrage(tasks)
+    
+    if U < best_solution[1]:
+        best_solution[0] = pi[:]
+        best_solution[1] = U
+    
+    sched = Schedule(pi)
+    sched.compute()
+    
+    b = -1
+    for j in range(len(pi)):
+        if sched.delivery_times[j] == sched.cmax:
+            b = j
+    
+    a = -1
+    for j in range(b + 1):
+        p_sum = sum(pi[k].processing_time for k in range(j, b + 1))
+        if sched.cmax == pi[j].release_time + p_sum + pi[b].delivery_time:
+            a = j
+            break
+    
+    if a == -1:
+        return best_solution[0], best_solution[1]
+    
+    c = -1
+    for j in range(a, b):
+        if pi[j].delivery_time < pi[b].delivery_time:
+            c = j
+    
+    if c == -1:
+        return best_solution[0], best_solution[1]
+    
+    K = list(range(c + 1, b + 1))
+    
+    r_min = min(pi[j].release_time for j in K)
+    q_min = min(pi[j].delivery_time for j in K)
+    p_sum = sum(pi[j].processing_time for j in K)
+    
+    old_r = pi[c].release_time
+    pi[c].release_time = max(pi[c].release_time, r_min + p_sum)
+    
+    _, LB = preemptive_schrage(pi)
+    
+    if LB < best_solution[1]:
+        carlier(pi, best_solution[1])
+        
+    pi[c].release_time = old_r
+    
+    old_q = pi[c].delivery_time
+    pi[c].delivery_time = max(pi[c].delivery_time, q_min + p_sum)
+    
+    _, LB = preemptive_schrage(pi)
+    
+    if LB < best_solution[1]:
+        carlier(pi, best_solution[1])
+        
+    pi[c].delivery_time = old_q
+    
+    return best_solution[0], best_solution[1]
