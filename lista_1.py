@@ -2,6 +2,7 @@ from RandomNumberGenerator import RandomNumberGenerator
 from dataclasses import dataclass
 from collections import deque
 import heapq
+import copy
 
 @dataclass(order=True)
 class Task():
@@ -83,11 +84,45 @@ def schrage(tasks: list[Task]) -> tuple[list[Task], int]:
 
     return schedule, cmax
 
+def preemptive_schrage(tasks: list[Task]) -> int:
+    if not tasks:
+        return 0
+    
+    N            : deque                  = deque(sorted(tasks, key=lambda t: t.release_time))
+    G            : list[tuple[int, Task]] = []
+    t            : int                    = N[0].release_time
+    cmax         : int                    = 0
+    current_task : Task                   = Task(task_id=-1, processing_time=0, release_time=0, delivery_time=float('inf'))
+    
+    while G or N:
+        while N and N[0].release_time <= t:
+            task = N.popleft()
+            heapq.heappush(G, (-task.delivery_time, task))
+
+        if G:
+            _, task = heapq.heappop(G)
+            current_task = copy.deepcopy(task)
+
+            next_r = N[0].release_time if N else float('inf')
+            finish_curr = t + current_task.processing_time
+            dt = min(next_r, finish_curr) - t
+            t += dt
+            current_task.processing_time -= dt
+
+            if current_task.processing_time > 0:
+                heapq.heappush(G, (-current_task.delivery_time, current_task))
+            else:
+                cmax = max(cmax, t + task.delivery_time)
+        else:
+            t = N[0].release_time
+
+    return cmax
+
 def generate_random_tasks(n: int, Z: int) -> list[Task]:
     randGen = RandomNumberGenerator(Z)
     tasks: list[Task] = [Task(task_id=j, processing_time=randGen.nextInt(1, 29)) for j in range(1, n+1)]
     A: int = sum(task.processing_time for task in tasks)
-    X: int = 29
+    X: int = A
     for task in tasks:
         task.release_time = randGen.nextInt(1, A)
     for task in tasks:
@@ -96,8 +131,15 @@ def generate_random_tasks(n: int, Z: int) -> list[Task]:
     return tasks
     
 if __name__ == '__main__':
-    tasks = generate_random_tasks(n=10, Z=1)
-
+    tasks = generate_random_tasks(n=6, Z=1)
+    # tasks = [
+    #     Task(task_id=1, release_time=1, processing_time=2, delivery_time=5),
+    #     Task(task_id=2, release_time=2, processing_time=3, delivery_time=4),
+    #     Task(task_id=3, release_time=8, processing_time=1, delivery_time=6),
+    #     Task(task_id=4, release_time=7, processing_time=2, delivery_time=3),
+    #     Task(task_id=5, release_time=6, processing_time=3, delivery_time=7),
+    #     Task(task_id=6, release_time=4, processing_time=4, delivery_time=1)
+    # ]
     for t in tasks:
         print(t)
     
@@ -108,6 +150,9 @@ if __name__ == '__main__':
     schrage_schedule = Schedule(schrage(tasks)[0])
     schrage_schedule.compute()
     schrage_schedule.display()
+    print(preemptive_schrage(tasks))
+    for t in tasks:
+        print(t)
 
     
 def preemptive_schrage(tasks: list[Task]) -> tuple[list[Task], int]:
