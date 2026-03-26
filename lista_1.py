@@ -2,7 +2,6 @@ from RandomNumberGenerator import RandomNumberGenerator
 from dataclasses import dataclass
 from collections import deque
 import heapq
-import copy
 # https://pypi.org/project/ansicolors/
 from colors import color
 
@@ -12,6 +11,21 @@ class Task():
     r: int = 0  # Release time
     p: int = 0  # Processing time
     q: int = 0  # Delivery time
+
+    @classmethod
+    def from_task(cls, task: Task, **kwargs):
+        return cls(
+            j=kwargs.get('j', task.j),
+            r=kwargs.get('r', task.r),
+            p=kwargs.get('p', task.p),
+            q=kwargs.get('q', task.q)
+        )
+
+    def __copy__(self):
+        return Task(j=self.j, r=self.r, p=self.p, q=self.q)
+    
+    def __deepcopy__(self, memo):
+        return Task(j=self.j, r=self.r, p=self.p, q=self.q)
 
     def __str__(self):
         jStr = color(f"j={self.j}", fg="magenta", style="bold")
@@ -129,14 +143,13 @@ def preemptive_schrage(J: list[Task]) -> int:
 
         if G:
             _, task = heapq.heappop(G)
-
-            rNext = N[0].r if N else float('inf')
-            dt = min(rNext, t + task.p) - t
+            
+            dt = min(N[0].r, t + task.p) - t if N else task.p
             t += dt
             timeLeft = task.p - dt
 
             if timeLeft > 0:
-                heapq.heappush(G, (-task.q, Task(j=task.j, r=task.r, p=timeLeft, q=task.q)))
+                heapq.heappush(G, (-task.q, Task.from_task(task, p=timeLeft)))
             else:
                 cMax = max(cMax, t + task.q)
         else:
@@ -150,13 +163,11 @@ def carlier(J: list[Task], UB: int = float('inf')) -> tuple[list[Task], int]:
 
     if U < UB:
         UB = U
-        piStar = copy.deepcopy(pi)
+        piStar = pi.copy()
 
-    sched = Schedule(pi)
-
-    b = next(j for j, (_, _, _, d) in enumerate(sched) if d == sched.cMax)
-    a = next(j for j in range(b+1) if sum(t.p for t in pi[j:b+1]) + pi[j].r + pi[b].q == sched.cMax)
-    c = next((j for j in range(a, b+1) if pi[j].q < pi[b].q), None)
+    b = max(j for j, (_, _, _, d) in enumerate(Schedule(pi)) if d == U)
+    a = next(j for j in range(b+1) if sum(t.p for t in pi[j:b+1]) + pi[j].r + pi[b].q == U)
+    c = next((j for j in range(b-1, a-1, -1) if pi[j].q < pi[b].q), None)
 
     if c is None:
         return piStar, UB
@@ -164,33 +175,28 @@ def carlier(J: list[Task], UB: int = float('inf')) -> tuple[list[Task], int]:
     K = pi[c:b+1]
     minQK = min(t.q for t in K)
 
-    piBranch = copy.deepcopy(pi)
-
+    piBranch = pi.copy()
     idx = c # index of the altered task
-    piBranch[idx] = Task(j=pi[c].j, r=max(pi[c].r, min(t.r for t in K) + minQK), p=pi[c].p, q=pi[c].q)
-    if preemptive_schrage(piBranch) < UB:
-        piNew, _ = carlier(piBranch, UB)
-        if piNew:
-            idx = next(i for i, t in enumerate(piNew) if t.j == pi[c].j)
-            piNew[idx] = pi[c]
-            piBranch = copy.deepcopy(piNew)
-            sched = Schedule(piBranch)
-            if sched.cMax < UB:
-                UB = sched.cMax
-                piStar = copy.deepcopy(piBranch)
+    def branch(task: Task):
+        nonlocal idx, piBranch, UB, piStar
+        piBranch[idx] = task
+        if preemptive_schrage(piBranch) < UB:
+            piNew, _ = carlier(piBranch, UB)
+            if piNew:
+                idx = next(i for i, t in enumerate(piNew) if t.j == pi[c].j)
+                piNew[idx] = pi[c]
+                piNewCMax = Schedule(piNew).cMax
+                if piNewCMax < UB:
+                    UB = piNewCMax
+                    piStar = piNew.copy()
+                piBranch = piNew.copy()
+            else:
+                piBranch[idx] = pi[c]
+            
 
-    piBranch[idx] = Task(j=pi[c].j, r=pi[c].r, p=pi[c].p, q=max(pi[c].q, minQK + sum(t.p for t in K)))
-    if preemptive_schrage(piBranch) < UB:
-        piNew, _ = carlier(piBranch, UB)
-        if piNew:
-            idx = next(i for i, t in enumerate(piNew) if t.j == pi[c].j)
-            piNew[idx] = pi[c]
-            piBranch = copy.deepcopy(piNew)
-            sched = Schedule(piBranch)
-            if sched.cMax < UB:
-                UB = sched.cMax
-                piStar = copy.deepcopy(piBranch)
-        
+    branch(Task.from_task(pi[c], r=max(pi[c].r, min(t.r for t in K) + minQK)))
+    branch(Task.from_task(pi[c], q=max(pi[c].q, minQK + sum(t.p for t in K))))
+
     return piStar, UB
 
 def generate_random_tasks(n: int, Z: int) -> list[Task]:
