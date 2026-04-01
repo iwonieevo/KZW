@@ -47,10 +47,8 @@ class Schedule:
     __C:     list[list[int]]  # C
     __cMax:  int              # C_max
 
-if __name__ == "__main__":
-    pass
 
-def johnson(J: TaskList):
+def johnson(J: TaskList) -> TaskList:
     l = 1
     k = len(J.tasks)
     N = J.tasks.copy()
@@ -65,5 +63,8 @@ def johnson(J: TaskList):
             pi[k] = j
             k -= 1
         N.pop(j)
-    
-    return pi
+
+    return TaskList(m=J.m, tasks=[J.tasks[i] for i in pi])
+
+if __name__ == "__main__":
+    pass
