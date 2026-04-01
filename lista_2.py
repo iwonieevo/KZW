@@ -10,30 +10,36 @@ class Task:
 
     @classmethod
     def from_task(cls, task: Task, **kwargs):
-        return cls(
-            j=kwargs.get('j', task.j),
-            p=kwargs.get('p', task.p),
-        )
+        return cls(j=kwargs.get('j', task.j), p=kwargs.get('p', task.p))
     
     @property
     def m(self):
         return len(self.p)
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(frozen=True, kw_only=True, order=True)
 class TaskList:
     m     : int
-    tasks : list[Task]
+    tasks : tuple[Task, ...]
 
     def __post_init__(self):
         assert self.m > 0, "Number of machines must be a positive integer."
         
-        object.__setattr__(self, 'tasks', [Task.from_task(t, p=t.p[:self.m] + (0,)*(self.m - t.m)) for t in self.tasks])
+        object.__setattr__(self, 'tasks', tuple(Task.from_task(t, p=t.p[:self.m] + (0,)*(self.m - t.m)) for t in self.tasks))
 
     def __iter__(self):
         return iter(self.tasks)
     
     def __len__(self):
         return len(self.tasks)
+    
+    @classmethod
+    def from_tasks(cls, *tasks: Task):
+        m = max(t.m for t in tasks) if tasks else 0
+        return cls(m=m, tasks=tasks)
+    
+    @classmethod
+    def from_task_list(cls, taskList: TaskList, **kwargs):
+        return cls(m=kwargs.get('m', taskList.m), tasks=kwargs.get('tasks', taskList.tasks))
     
     def display(self):
         headers = ["j"] + [f"p_{i+1}" for i in range(self.m)]
@@ -62,7 +68,7 @@ class Schedule:
 
     def __setattr__(self, name, value):
         super().__setattr__(name, value)
-        if name == "taskList":  
+        if name == 'taskList' and hasattr(self, '_Schedule__cMax'):  
             self.__compute()
 
     def __iter__(self):
@@ -120,9 +126,29 @@ class Schedule:
         print(color(f"C_max: {self.cMax}", fg="red", style="bold"))
                 
 
+def johnson(J: TaskList) -> TaskList:
+    l  : int                     = 0
+    k  : int                     = len(J) - 1
+    N  : list[Task]              = list(J.tasks)
+    pi : list[Task | None]       = [None] * len(J)
+
+    while N:
+        taskStar = min(N, key=lambda t: min(t.p))
+        
+        if taskStar.p[0] < taskStar.p[1]:
+            pi[l] = taskStar
+            l += 1
+        else:
+            pi[k] = taskStar
+            k -= 1
+        
+        N.remove(taskStar)
+
+    return TaskList(m=J.m, tasks=tuple(pi))
+
 def generate_random_task_list(n: int, m: int, Z: int) -> TaskList:
     randGen = RandomNumberGenerator(Z)
-    return TaskList(m=m, tasks=[Task(j=j+1, p=tuple(randGen.nextInt(1,29) for _ in range(m))) for j in range(n)])
+    return TaskList(m=m, tasks=tuple(Task(j=j+1, p=tuple(randGen.nextInt(1,29) for _ in range(m))) for j in range(n)))
 
 def print_headline(headline: str, frame: str = "#", frameWidth: int = 1, padding: int = 1, fgColor: str = "cyan", headlineStyle: str = "underline+bold"):
     div = color(frame * (len(headline) + 2 * (frameWidth + padding)), fg=fgColor, style="bold")
@@ -141,27 +167,8 @@ def print_headline(headline: str, frame: str = "#", frameWidth: int = 1, padding
           f"\n{div}\n")
 
 
-
-def johnson(J: TaskList) -> TaskList:
-    l = 1
-    k = len(J.tasks)
-    N = J.tasks.copy()
-    pi = [0] * len(J.tasks)
-    while N:
-        i, j = min(((i, j) for i in range(N.m) for j in range(len(N))), key=lambda x: N[x[1]].p[x[0]])
-        
-        if N[j].p[0] < N[j].p[1]:
-            pi[l] = j
-            l += 1
-        else:
-            pi[k] = j
-            k -= 1
-        N.pop(j)
-
-    return TaskList(m=J.m, tasks=[J.tasks[i] for i in pi])
-
 if __name__ == "__main__":
-    tasks = generate_random_task_list(n=5, m=5, Z=1)
+    tasks = generate_random_task_list(n=10, m=2, Z=1)
 
     print_headline("Generated Task List")
     tasks.display()
@@ -169,4 +176,8 @@ if __name__ == "__main__":
     print_headline("Schedule #1: Original Task Order")
     scheduleOriginal = Schedule(tasks)
     scheduleOriginal.display()
+
+    print_headline("Schedule #2: Johnson's Algorithm")
+    scheduleJohnson = Schedule(johnson(tasks))
+    scheduleJohnson.display()
 
