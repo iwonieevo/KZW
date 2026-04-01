@@ -49,3 +49,21 @@ class Schedule:
 
 if __name__ == "__main__":
     pass
+
+def johnson(J: TaskList):
+    l = 1
+    k = len(J.tasks)
+    N = J.tasks.copy()
+    pi = [0] * len(J.tasks)
+    while N:
+        i, j = min(((i, j) for i in range(N.m) for j in range(len(N))), key=lambda x: N[x[1]].p[x[0]])
+        
+        if N[j].p[0] < N[j].p[1]:
+            pi[l] = j
+            l += 1
+        else:
+            pi[k] = j
+            k -= 1
+        N.pop(j)
+    
+    return pi
