@@ -2,6 +2,8 @@ from RandomNumberGenerator import RandomNumberGenerator
 from dataclasses import dataclass
 # https://pypi.org/project/ansicolors/
 from colors import color
+import time
+
 
 @dataclass(frozen=True, kw_only=True, order=True)
 class Task:
@@ -15,6 +17,7 @@ class Task:
     @property
     def m(self):
         return len(self.p)
+
 
 @dataclass(frozen=True, kw_only=True, order=True)
 class TaskList:
@@ -58,7 +61,8 @@ class TaskList:
                 color(f"{value:^{width}}", fg="pink" if i == 0 else "orange")
                 for i, (value, width) in enumerate(zip(row, widths))
             ))
-        
+
+
 @dataclass
 class Schedule:
     taskList: TaskList
@@ -127,10 +131,10 @@ class Schedule:
                 
 
 def johnson(J: TaskList) -> TaskList:
-    l  : int                     = 0
-    k  : int                     = len(J) - 1
-    N  : list[Task]              = list(J.tasks)
-    pi : list[Task | None]       = [None] * len(J)
+    l  : int               = 0
+    k  : int               = len(J) - 1
+    N  : list[Task]        = list(J.tasks)
+    pi : list[Task | None] = [None] * len(J)
 
     while N:
         taskStar = min(N, key=lambda t: min(t.p))
@@ -146,9 +150,74 @@ def johnson(J: TaskList) -> TaskList:
 
     return TaskList(m=J.m, tasks=tuple(pi))
 
+
+def branch_and_bound(J: TaskList, initUB: int, LBFormula: int = 0) -> TaskList:
+    piStar : TaskList = J
+    UB     : int      = initUB
+    m      : int      = J.m
+
+    def bnb(N: tuple[Task, ...], pi: tuple[Task, ...]):
+        nonlocal UB, piStar
+
+        if not N:
+            currentSchedule = Schedule(TaskList(m=m, tasks=pi))
+            if currentSchedule.cMax < UB:
+                UB = currentSchedule.cMax
+                piStar = pi
+            return
+
+        LB = 0
+        if pi:
+            machineCTimes = Schedule(TaskList(m=m, tasks=pi)).completionTimes
+
+            match LBFormula:
+                case 1:
+                    LB = max(
+                        machineCTimes[i][-1] + 
+                        sum(t.p[i] for t in N)
+                        for i in range(m)
+                    )
+                case 2:
+                    LB = max(
+                        machineCTimes[i][-1] + 
+                        sum(t.p[i] for t in N) + 
+                        (sum(min(t.p[k] for k in range(i + 1, m)) for t in J) if i < m - 1 else 0) 
+                        for i in range(m)
+                    )
+                case 3:
+                    LB = max(
+                        machineCTimes[i][-1] + 
+                        sum(t.p[i] for t in N) + 
+                        (sum(min(t.p[k] for k in range(i + 1, m)) for t in N) if i < m - 1 else 0) 
+                        for i in range(m)
+                    )
+                case 4:
+                    LB = max(
+                        machineCTimes[i][-1] + 
+                        sum(t.p[i] for t in N) + 
+                        (min(sum(t.p[k] for k in range(i + 1, m)) for t in N) if i < m - 1 else 0) 
+                        for i in range(m)
+                    )
+                case _:
+                    LB = machineCTimes[-1][-1] + sum(t.p[-1] for t in N)
+                    
+        if LB >= UB:
+            return
+
+        for i, nextTask in enumerate(N):
+            newN = N[:i] + N[i+1:]
+            newPi = pi + (nextTask,)
+            bnb(N=newN, pi=newPi)
+
+    bnb(N=tuple(J.tasks), pi=tuple())
+        
+    return TaskList(m=m, tasks=piStar)
+
+
 def generate_random_task_list(n: int, m: int, Z: int) -> TaskList:
     randGen = RandomNumberGenerator(Z)
     return TaskList(m=m, tasks=tuple(Task(j=j+1, p=tuple(randGen.nextInt(1,29) for _ in range(m))) for j in range(n)))
+
 
 def print_headline(headline: str, frame: str = "#", frameWidth: int = 1, padding: int = 1, fgColor: str = "cyan", headlineStyle: str = "underline+bold"):
     div = color(frame * (len(headline) + 2 * (frameWidth + padding)), fg=fgColor, style="bold")
@@ -168,7 +237,7 @@ def print_headline(headline: str, frame: str = "#", frameWidth: int = 1, padding
 
 
 if __name__ == "__main__":
-    tasks = generate_random_task_list(n=10, m=2, Z=1)
+    tasks = generate_random_task_list(n=12, m=2, Z=1)
 
     print_headline("Generated Task List")
     tasks.display()
@@ -181,3 +250,44 @@ if __name__ == "__main__":
     scheduleJohnson = Schedule(johnson(tasks))
     scheduleJohnson.display()
 
+    print_headline("Schedule #3: Branch and Bound Algorithm")
+
+    print_headline(">>>LB formula #0")
+    startTime = time.perf_counter()
+    tasksBnB = branch_and_bound(J=tasks, initUB=scheduleOriginal.cMax, LBFormula=0)
+    duration = time.perf_counter() - startTime
+    scheduleBnB = Schedule(tasksBnB)
+    scheduleBnB.display()
+    print(color(f"{duration=}s", fg="white", bg="red", style="underline+bold"))
+
+    print_headline(">>>LB formula #1")
+    startTime = time.perf_counter()
+    tasksBnB = branch_and_bound(J=tasks, initUB=scheduleOriginal.cMax, LBFormula=1)
+    duration = time.perf_counter() - startTime
+    scheduleBnB = Schedule(tasksBnB)
+    scheduleBnB.display()
+    print(color(f"{duration=}s", fg="white", bg="red", style="underline+bold"))
+
+    print_headline(">>>LB formula #2")
+    startTime = time.perf_counter()
+    tasksBnB = branch_and_bound(J=tasks, initUB=scheduleOriginal.cMax, LBFormula=2)
+    duration = time.perf_counter() - startTime
+    scheduleBnB = Schedule(tasksBnB)
+    scheduleBnB.display()
+    print(color(f"{duration=}s", fg="white", bg="red", style="underline+bold"))
+
+    print_headline(">>>LB formula #3")
+    startTime = time.perf_counter()
+    tasksBnB = branch_and_bound(J=tasks, initUB=scheduleOriginal.cMax, LBFormula=3)
+    duration = time.perf_counter() - startTime
+    scheduleBnB = Schedule(tasksBnB)
+    scheduleBnB.display()
+    print(color(f"{duration=}s", fg="white", bg="red", style="underline+bold"))
+
+    print_headline(">>>LB formula #4")
+    startTime = time.perf_counter()
+    tasksBnB = branch_and_bound(J=tasks, initUB=scheduleOriginal.cMax, LBFormula=4)
+    duration = time.perf_counter() - startTime
+    scheduleBnB = Schedule(tasksBnB)
+    scheduleBnB.display()
+    print(color(f"{duration=}s", fg="white", bg="red", style="underline+bold"))
