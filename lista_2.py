@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from RandomNumberGenerator import RandomNumberGenerator
 from dataclasses import dataclass
 # https://pypi.org/project/ansicolors/
@@ -181,14 +183,14 @@ def branch_and_bound(J: TaskList, initUB: int, LBFormula: int = 0) -> TaskList:
                     LB = max(
                         machineCTimes[i][-1] + 
                         sum(t.p[i] for t in N) + 
-                        (sum(min(t.p[k] for k in range(i + 1, m)) for t in J) if i < m - 1 else 0) 
+                        (sum(min(t.p[k] for t in J) for k in range(i + 1, m)) if i < m - 1 else 0) 
                         for i in range(m)
                     )
                 case 3:
                     LB = max(
                         machineCTimes[i][-1] + 
                         sum(t.p[i] for t in N) + 
-                        (sum(min(t.p[k] for k in range(i + 1, m)) for t in N) if i < m - 1 else 0) 
+                        (sum(min(t.p[k] for t in N) for k in range(i + 1, m)) if i < m - 1 else 0) 
                         for i in range(m)
                     )
                 case 4:
