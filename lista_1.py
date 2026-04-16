@@ -157,7 +157,7 @@ def preemptive_schrage(J: list[Task]) -> int:
 
     return cMax
 
-def carlier(J: list[Task], UB: int = float('inf')) -> tuple[list[Task], int]:
+def carlier(J: list[Task], UB: int = int('inf')) -> tuple[list[Task], int]:
     piStar = None
     pi, U = schrage(J)
 

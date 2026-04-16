@@ -148,13 +148,13 @@ def johnson(J: TaskList) -> TaskList:
         
         N.remove(taskStar)
 
-    return TaskList(m=J.m, tasks=tuple(pi))
+    return TaskList(m=J.m, tasks=tuple(tuple(t for t in pi if t is not None)))
 
 
 def branch_and_bound(J: TaskList, initUB: int, LBFormula: int = 0) -> TaskList:
-    piStar : TaskList = J
-    UB     : int      = initUB
-    m      : int      = J.m
+    piStar : tuple[Task, ...] = J.tasks
+    UB     : int              = initUB
+    m      : int              = J.m
 
     def bnb(N: tuple[Task, ...], pi: tuple[Task, ...]):
         nonlocal UB, piStar
@@ -237,7 +237,7 @@ def print_headline(headline: str, frame: str = "#", frameWidth: int = 1, padding
 
 
 if __name__ == "__main__":
-    tasks = generate_random_task_list(n=12, m=2, Z=1)
+    tasks = generate_random_task_list(n=9, m=2, Z=1)
 
     print_headline("Generated Task List")
     tasks.display()
