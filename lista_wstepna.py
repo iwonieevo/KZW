@@ -7,10 +7,10 @@ class Task():
     p: int
     r: int
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"Task(j={self.j}, r={self.r}, p={self.p})"
 
-def getSchedule(orderedTasksList: list[Task]):
+def getSchedule(orderedTasksList: list[Task]) -> tuple[list[int], list[int]]:
     S = [0] * len(orderedTasksList)
     C = [0] * len(orderedTasksList)
     for i, task in enumerate(orderedTasksList):
@@ -26,7 +26,7 @@ def getSchedule(orderedTasksList: list[Task]):
     C_str = ["C_j"] + [str(c_i) for c_i in C]
     col_width = max(len(cell) for cell in j_str + S_str + C_str)
 
-    def format_row(row):
+    def format_row(row) -> str:
         return " | ".join(f"{cell:>{col_width}}" for i, cell in enumerate(row))
     
     sep_row = "-+-".join("-" * col_width for _ in range(len(j_str)))

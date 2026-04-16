@@ -1,7 +1,9 @@
 from RandomNumberGenerator import RandomNumberGenerator
 from dataclasses import dataclass
+from typing import Any, Iterator
 from collections import deque
 import heapq
+import sys
 # https://pypi.org/project/ansicolors/
 from colors import color
 
@@ -13,7 +15,7 @@ class Task():
     q: int = 0  # Delivery time
 
     @classmethod
-    def from_task(cls, task: Task, **kwargs):
+    def from_task(cls, task: Task, **kwargs) -> Task:
         return cls(
             j=kwargs.get('j', task.j),
             r=kwargs.get('r', task.r),
@@ -21,13 +23,13 @@ class Task():
             q=kwargs.get('q', task.q)
         )
 
-    def __copy__(self):
+    def __copy__(self) -> Task:
         return Task(j=self.j, r=self.r, p=self.p, q=self.q)
     
-    def __deepcopy__(self, memo):
+    def __deepcopy__(self, memo: dict[int, Any]) -> Task:
         return Task(j=self.j, r=self.r, p=self.p, q=self.q)
 
-    def __str__(self):
+    def __str__(self) -> str:
         jStr = color(f"j={self.j}", fg="magenta", style="bold")
         rStr = color(f"r={self.r}", fg="orange")
         pStr = color(f"p={self.p}", fg=(78, 220, 78)) # bright green
@@ -37,7 +39,7 @@ class Task():
     
     
 class Schedule:
-    def __init__(self, tasks: list[Task]):
+    def __init__(self, tasks: list[Task]) -> None:
         self.__tasks           : list[Task] = tasks # J
         self.__startTimes      : list[int]  = []    # S
         self.__completionTimes : list[int]  = []    # C
@@ -45,10 +47,10 @@ class Schedule:
         self.__cMax            : int        = 0     # C_max
         self.__compute()
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[tuple[Task, int, int, int]]:
         return iter(zip(self.tasks, self.startTimes, self.completionTimes, self.deliveryTimes))
 
-    def __compute(self):
+    def __compute(self) -> None:
         for i, task in enumerate(self.tasks):
             start      : int = task.r if i == 0 else max(task.r, self.completionTimes[i-1])
             completion : int = start + task.p
@@ -60,26 +62,26 @@ class Schedule:
             self.__cMax = max(self.cMax, delivery)
 
     @property
-    def tasks(self):
+    def tasks(self) -> list[Task]:
         return self.__tasks
     
     @property
-    def startTimes(self):
+    def startTimes(self) -> list[int]:
         return self.__startTimes
     
     @property
-    def completionTimes(self):
+    def completionTimes(self) -> list[int]:
         return self.__completionTimes
     
     @property
-    def deliveryTimes(self):
+    def deliveryTimes(self) -> list[int]:
         return self.__deliveryTimes
     
     @property
-    def cMax(self):
+    def cMax(self) -> int:
         return self.__cMax
 
-    def display(self):
+    def display(self) -> None:
         colWidth = len(str(self.cMax))
         labelWidth = 9
         frameColor = "cyan"
@@ -157,7 +159,7 @@ def preemptive_schrage(J: list[Task]) -> int:
 
     return cMax
 
-def carlier(J: list[Task], UB: int = int('inf')) -> tuple[list[Task], int]:
+def carlier(J: list[Task], UB: int = sys.maxsize) -> tuple[list[Task], int]:
     piStar = None
     pi, U = schrage(J)
 
@@ -170,7 +172,7 @@ def carlier(J: list[Task], UB: int = int('inf')) -> tuple[list[Task], int]:
     c = next((j for j in range(b-1, a-1, -1) if pi[j].q < pi[b].q), None)
 
     if c is None:
-        return piStar, UB
+        return piStar if piStar is not None else J, UB
     
     K = pi[c:b+1]
     minQK = min(t.q for t in K)
@@ -197,7 +199,7 @@ def carlier(J: list[Task], UB: int = int('inf')) -> tuple[list[Task], int]:
     branch(Task.from_task(pi[c], r=max(pi[c].r, min(t.r for t in K) + minQK)))
     branch(Task.from_task(pi[c], q=max(pi[c].q, minQK + sum(t.p for t in K))))
 
-    return piStar, UB
+    return piStar if piStar is not None else J, UB
 
 def generate_random_tasks(n: int, Z: int) -> list[Task]:
     randGen = RandomNumberGenerator(Z)
@@ -207,7 +209,7 @@ def generate_random_tasks(n: int, Z: int) -> list[Task]:
     rList = [randGen.nextInt(1, A) for _ in range(n)]
     return [Task(j=i+1, r=rList[i], p=pList[i], q=randGen.nextInt(1, X)) for i in range(n)]
 
-def print_headline(headline: str, frame: str = "#", frameWidth: int = 1, padding: int = 1, fgColor: str = "cyan", headlineStyle: str = "underline+bold"):
+def print_headline(headline: str, frame: str = "#", frameWidth: int = 1, padding: int = 1, fgColor: str = "cyan", headlineStyle: str = "underline+bold") -> None:
     div = color(frame * (len(headline) + 2 * (frameWidth + padding)), fg=fgColor, style="bold")
     frame = frame[0]
 

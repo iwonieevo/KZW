@@ -1,7 +1,6 @@
-from __future__ import annotations
-
 from RandomNumberGenerator import RandomNumberGenerator
 from dataclasses import dataclass
+from typing import Iterator
 # https://pypi.org/project/ansicolors/
 from colors import color
 import time
@@ -13,11 +12,11 @@ class Task:
     p: tuple[int, ...]
 
     @classmethod
-    def from_task(cls, task: Task, **kwargs):
+    def from_task(cls, task: Task, **kwargs) -> Task:
         return cls(j=kwargs.get('j', task.j), p=kwargs.get('p', task.p))
     
     @property
-    def m(self):
+    def m(self) -> int:
         return len(self.p)
 
 
@@ -26,27 +25,27 @@ class TaskList:
     m     : int
     tasks : tuple[Task, ...]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         assert self.m > 0, "Number of machines must be a positive integer."
         
         object.__setattr__(self, 'tasks', tuple(Task.from_task(t, p=t.p[:self.m] + (0,)*(self.m - t.m)) for t in self.tasks))
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Task]:
         return iter(self.tasks)
     
-    def __len__(self):
+    def __len__(self) -> int:
         return len(self.tasks)
     
     @classmethod
-    def from_tasks(cls, *tasks: Task):
+    def from_tasks(cls, *tasks: Task) -> TaskList:
         m = max(t.m for t in tasks) if tasks else 0
         return cls(m=m, tasks=tasks)
     
     @classmethod
-    def from_task_list(cls, taskList: TaskList, **kwargs):
+    def from_task_list(cls, taskList: TaskList, **kwargs) -> TaskList:
         return cls(m=kwargs.get('m', taskList.m), tasks=kwargs.get('tasks', taskList.tasks))
     
-    def display(self):
+    def display(self) -> None:
         headers = ["j"] + [f"p_{i+1}" for i in range(self.m)]
         columns = [[t.j for t in self.tasks]] + [[t.p[i] for t in self.tasks] for i in range(self.m)]
         widths = [max(len(label), max(len(str(v)) for v in vals)) for label, vals in zip(headers, columns)]
@@ -69,20 +68,20 @@ class TaskList:
 class Schedule:
     taskList: TaskList
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         self.__compute()
 
-    def __setattr__(self, name, value):
+    def __setattr__(self, name, value) -> None:
         super().__setattr__(name, value)
         if name == 'taskList' and hasattr(self, '_Schedule__cMax'):  
             self.__compute()
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[tuple[Task, tuple[int, ...], tuple[int, ...]]]:
         return iter(zip(self.taskList, zip(*self.startTimes), zip(*self.completionTimes)))
     
-    def __compute(self):
-        self.__startTimes      = [[0]*len(self.taskList) for _ in range(self.taskList.m)]
-        self.__completionTimes = [[0]*len(self.taskList) for _ in range(self.taskList.m)]
+    def __compute(self) -> None:
+        self.__startTimes:      list[list[int]] = [[0]*len(self.taskList) for _ in range(self.taskList.m)]
+        self.__completionTimes: list[list[int]] = [[0]*len(self.taskList) for _ in range(self.taskList.m)]
         
         for j, task in enumerate(self.taskList):
             for i, p_i in enumerate(task.p):
@@ -92,21 +91,21 @@ class Schedule:
                 )
                 self.__completionTimes[i][j] = self.__startTimes[i][j] + p_i
         
-        self.__cMax = self.__completionTimes[-1][-1]
+        self.__cMax: int = self.__completionTimes[-1][-1]
 
     @property
-    def startTimes(self):
+    def startTimes(self) -> list[list[int]]:
         return self.__startTimes
     
     @property
-    def completionTimes(self):
+    def completionTimes(self) -> list[list[int]]:
         return self.__completionTimes
     
     @property
-    def cMax(self):
+    def cMax(self) -> int:
         return self.__cMax
     
-    def display(self):
+    def display(self) -> None:
         cellWidth = max(len(str(self.cMax)) + 2, len(f"C_{self.taskList.m}"), 3)
 
         separator = color(" | ", fg="cyan")
@@ -150,7 +149,7 @@ def johnson(J: TaskList) -> TaskList:
         
         N.remove(taskStar)
 
-    return TaskList(m=J.m, tasks=tuple(tuple(t for t in pi if t is not None)))
+    return TaskList(m=J.m, tasks=tuple(filter(None, pi)))
 
 
 def branch_and_bound(J: TaskList, initUB: int, LBFormula: int = 0) -> TaskList:
@@ -221,7 +220,7 @@ def generate_random_task_list(n: int, m: int, Z: int) -> TaskList:
     return TaskList(m=m, tasks=tuple(Task(j=j+1, p=tuple(randGen.nextInt(1,29) for _ in range(m))) for j in range(n)))
 
 
-def print_headline(headline: str, frame: str = "#", frameWidth: int = 1, padding: int = 1, fgColor: str = "cyan", headlineStyle: str = "underline+bold"):
+def print_headline(headline: str, frame: str = "#", frameWidth: int = 1, padding: int = 1, fgColor: str = "cyan", headlineStyle: str = "underline+bold") -> None:
     div = color(frame * (len(headline) + 2 * (frameWidth + padding)), fg=fgColor, style="bold")
     frame = frame[0]
 
@@ -239,7 +238,7 @@ def print_headline(headline: str, frame: str = "#", frameWidth: int = 1, padding
 
 
 if __name__ == "__main__":
-    tasks = generate_random_task_list(n=9, m=2, Z=1)
+    tasks = generate_random_task_list(n=10, m=2, Z=1)
 
     print_headline("Generated Task List")
     tasks.display()
