@@ -20,6 +20,14 @@ class Task:
             d=kwargs.get('d', task.d)
             )
     
+    def __str__(self) -> str:
+        jStr = color(f"j={self.j}", fg="magenta", style="bold")
+        pStr = color(f"p={self.p}", fg="orange")
+        wStr = color(f"w={self.w}", fg=(78, 220, 78)) # bright green
+        dStr = color(f"d={self.d}", fg="yellow")
+
+        return f"[ {jStr} | {pStr} | {wStr} | {dStr} ]"
+    
 @dataclass
 class Schedule:
     pi: list[Task]
@@ -50,18 +58,59 @@ class Schedule:
 
             self.__F += tardiness * task.w
 
+    def display(self) -> None:
+        # Calculate weighted tardiness for each task
+        weighted_tardiness = [task.w * self.T[i] for i, task in enumerate(self.pi)]
+        
+        # Calculate cell width based on max value in any cell
+        all_values = ([t.j for t in self.pi] + [t.p for t in self.pi] + 
+                    [t.w for t in self.pi] + [t.d for t in self.pi] +
+                    self.C + self.T + weighted_tardiness)
+        cellWidth = max(4, max(len(str(v)) for v in all_values) + 1)
+        
+        separator = color(" | ", fg="cyan")
+        div = color("-+-".join(["-"*cellWidth for _ in range(7)]), fg="cyan")
+        
+        # Header row
+        headers = ["j", "p", "w", "d", "C", "T", "w*T"]
+        print(separator.join(
+            color(f"{header:^{cellWidth}}", fg="cyan", style="bold")
+            for header in headers
+        ))
+        print(div)
+        
+        # Rows for each task
+        for i, task in enumerate(self.pi):
+            wT = task.w * self.T[i]
+            row = [task.j, task.p, task.w, task.d, self.C[i], self.T[i], wT]
+            colors_for_cols = ["magenta", "orange", (78, 220, 78), "yellow", "green", "red", "white"]
+            
+            print(separator.join(
+                color(f"{str(val):^{cellWidth}}", fg=col)
+                for val, col in zip(row, colors_for_cols)
+            ))
+            print(div)
+        
+        print(color(f"F (Total Weighted Tardiness): {self.F}\n", fg="red", style="bold"))
+
     @property
-    def C(self):
+    def C(self) -> list[int]:
         return self.__C
     
     @property
-    def T(self):
+    def T(self) -> list[int]:
         return self.__T
     
     @property
-    def F(self):
+    def F(self) -> int:
         return self.__F
     
+def generate_random_tasks(n: int, Z: int) -> list[Task]:
+    randGen = RandomNumberGenerator(Z)
+    pList = [randGen.nextInt(1, 29) for _ in range(n)]
+    wList = [randGen.nextInt(1, 9) for _ in range(n)]
+    X = 29 # sum(pList)
+    return [Task(j=i+1, p=pList[i], w=wList[i], d=randGen.nextInt(1, X)) for i in range(n)]
 
 def print_headline(headline: str, frame: str = "#", frameWidth: int = 1, padding: int = 1, fgColor: str = "cyan", headlineStyle: str = "underline+bold") -> None:
     div = color(frame * (len(headline) + 2 * (frameWidth + padding)), fg=fgColor, style="bold")
@@ -80,4 +129,12 @@ def print_headline(headline: str, frame: str = "#", frameWidth: int = 1, padding
           f"\n{div}\n")
     
 if __name__ == '__main__':
-    pass
+    tasks = generate_random_tasks(n=6, Z=1)
+
+    print_headline("Generated tasks")
+    for t in tasks:
+        print(t)
+
+    print_headline("Schedule #1: Original Task Order")
+    scheduleOriginal = Schedule(tasks)
+    scheduleOriginal.display()
