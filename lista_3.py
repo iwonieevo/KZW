@@ -3,6 +3,7 @@ from typing import Iterator
 from dataclasses import dataclass
 # https://pypi.org/project/ansicolors/
 from colors import color
+from itertools import permutations
 
 @dataclass(frozen=True, kw_only=True, order=True)
 class Task:
@@ -79,5 +80,14 @@ def print_headline(headline: str, frame: str = "#", frameWidth: int = 1, padding
           f"\n{middle}",
           f"\n{div}\n")
     
+def bruteforce(sched: Schedule) -> Schedule:
+    perms = [p for p in permutations(sched.pi)]
+    best_pi = min(perms, key=lambda p: Schedule(list(p)).F)
+    return Schedule(list(best_pi))
+
+def greedy(sched: Schedule) -> Schedule:
+    sorted_tasks = sorted(sched.pi, key=lambda t: t.d)
+    return Schedule(sorted_tasks)
+
 if __name__ == '__main__':
     pass
