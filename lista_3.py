@@ -4,6 +4,7 @@ from dataclasses import dataclass
 # https://pypi.org/project/ansicolors/
 from colors import color
 from itertools import permutations
+import time
 
 @dataclass(frozen=True, kw_only=True, order=True)
 class Task:
@@ -139,7 +140,7 @@ def greedy(sched: Schedule) -> Schedule:
     return Schedule(sorted_tasks)
 
 if __name__ == '__main__':
-    tasks = generate_random_tasks(n=6, Z=1)
+    tasks = generate_random_tasks(n=9, Z=1)
 
     print_headline("Generated tasks")
     for t in tasks:
@@ -150,9 +151,15 @@ if __name__ == '__main__':
     scheduleOriginal.display()
 
     print_headline("Schedule #2: Bruteforce")
+    startTime = time.perf_counter()
     scheduleBruteforce = bruteforce(scheduleOriginal)
+    duration = time.perf_counter() - startTime
     scheduleBruteforce.display()
+    print(color(f"{duration=}s", fg="white", bg="red", style="underline+bold"))
 
     print_headline("Schedule #3: Greedy")
+    startTime = time.perf_counter()
     scheduleGreedy = greedy(scheduleOriginal)
+    duration = time.perf_counter() - startTime
     scheduleGreedy.display()
+    print(color(f"{duration=}s", fg="white", bg="red", style="underline+bold"))
