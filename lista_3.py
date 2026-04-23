@@ -148,3 +148,11 @@ if __name__ == '__main__':
     print_headline("Schedule #1: Original Task Order")
     scheduleOriginal = Schedule(tasks)
     scheduleOriginal.display()
+
+    print_headline("Schedule #2: Bruteforce")
+    scheduleBruteforce = bruteforce(scheduleOriginal)
+    scheduleBruteforce.display()
+
+    print_headline("Schedule #3: Greedy")
+    scheduleGreedy = greedy(scheduleOriginal)
+    scheduleGreedy.display()
