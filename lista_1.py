@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Any, Iterator
 from collections import deque
 import heapq
-import sys
 # https://pypi.org/project/ansicolors/
 from colors import color
 
@@ -159,7 +158,7 @@ def preemptive_schrage(J: list[Task]) -> int:
 
     return cMax
 
-def carlier(J: list[Task], UB: int = sys.maxsize) -> tuple[list[Task], int]:
+def carlier(J: list[Task], UB: int|float = float('inf')) -> tuple[list[Task], int]:
     piStar = None
     pi, U = schrage(J)
 
@@ -171,35 +170,33 @@ def carlier(J: list[Task], UB: int = sys.maxsize) -> tuple[list[Task], int]:
     a = next(j for j in range(b+1) if sum(t.p for t in pi[j:b+1]) + pi[j].r + pi[b].q == U)
     c = next((j for j in range(b-1, a-1, -1) if pi[j].q < pi[b].q), None)
 
-    if c is None:
-        return piStar if piStar is not None else J, UB
-    
-    K = pi[c:b+1]
-    minQK = min(t.q for t in K)
+    if c is not None:    
+        K = pi[c:b+1]
+        minQK = min(t.q for t in K)
 
-    piBranch = pi.copy()
-    idx = c # index of the altered task
-    def branch(task: Task):
-        nonlocal idx, piBranch, UB, piStar
-        piBranch[idx] = task
-        if preemptive_schrage(piBranch) < UB:
-            piNew, _ = carlier(piBranch, UB)
-            if piNew:
-                idx = next(i for i, t in enumerate(piNew) if t.j == pi[c].j)
-                piNew[idx] = pi[c]
-                piNewCMax = Schedule(piNew).cMax
-                if piNewCMax < UB:
-                    UB = piNewCMax
-                    piStar = piNew.copy()
-                piBranch = piNew.copy()
-            else:
-                piBranch[idx] = pi[c]
-            
+        piBranch = pi.copy()
+        idx = c # index of the altered task
+        def branch(task: Task):
+            nonlocal idx, piBranch, UB, piStar
+            piBranch[idx] = task
+            if preemptive_schrage(piBranch) < UB:
+                piNew, _ = carlier(piBranch, UB)
+                if piNew:
+                    idx = next(i for i, t in enumerate(piNew) if t.j == pi[c].j)
+                    piNew[idx] = pi[c]
+                    piNewCMax = Schedule(piNew).cMax
+                    if piNewCMax < UB:
+                        UB = piNewCMax
+                        piStar = piNew.copy()
+                    piBranch = piNew.copy()
+                else:
+                    piBranch[idx] = pi[c]
+                
 
-    branch(Task.from_task(pi[c], r=max(pi[c].r, min(t.r for t in K) + minQK)))
-    branch(Task.from_task(pi[c], q=max(pi[c].q, minQK + sum(t.p for t in K))))
+        branch(Task.from_task(pi[c], r=max(pi[c].r, min(t.r for t in K) + minQK)))
+        branch(Task.from_task(pi[c], q=max(pi[c].q, minQK + sum(t.p for t in K))))
 
-    return piStar if piStar is not None else J, UB
+    return piStar if piStar is not None else J, int(UB)
 
 def generate_random_tasks(n: int, Z: int) -> list[Task]:
     randGen = RandomNumberGenerator(Z)
