@@ -307,3 +307,76 @@ class Schedule:
             print(f"{label_str} {row}")
 
     
+
+# assume joblist generation is already implemented
+
+# Internal helper to create a Schedule from a task order using greedy earliest-start-time scheduling.
+def schedule_from_task_order(job_list: JobList, task_order: list[Task]) -> Schedule:
+    """Internal: produce a Schedule from a task ordering using greedy earliest-start-time."""
+    scheduled_ops: list[ScheduledOperation] = []
+    machine_free_time: dict[int, int] = {m: 0 for m in job_list.machines}
+    task_completion_time: dict[int, int] = {}
+    
+    for task in task_order:
+        for op in task.O:
+            earliest_start = task_completion_time.get(task.j, 0)
+            earliest_start = max(earliest_start, machine_free_time[op.m])
+            scheduled_ops.append(ScheduledOperation(operation=op, start=earliest_start))
+            op_end = earliest_start + op.p
+            machine_free_time[op.m] = op_end
+            task_completion_time[task.j] = op_end
+    
+    return Schedule(job_list, scheduled_ops)
+
+
+# NEH heuristic implementation by Claude - TODO: testing
+def neh(job_list: JobList) -> Schedule:
+    """
+    NEH (Nawaz, Enscore, Ham) heuristic following the pseudocode.
+    
+    Builds schedule by processing tasks in order of decreasing processing time,
+    inserting each at the position that minimizes Cmax.
+    """
+    tasks = list(job_list.tasks)
+    if not tasks:
+        return Schedule(job_list, [])
+    
+    # Calculate total processing time for each task (ωⱼ in pseudocode)
+    processing_times: dict[int, int] = {task.j: task.total_processing_time for task in tasks}
+    
+    # Priority queue W: tasks ordered by processing time (descending)
+    waiting_queue = sorted(tasks, key=lambda t: processing_times[t.j], reverse=True)
+    
+    # Start with empty schedule
+    current_schedule: list[Task] = []
+    k = 1
+    
+    # Process each task from the queue
+    while waiting_queue:
+        # Get task with max processing time (argmax ωⱼ)
+        candidate_task = waiting_queue.pop(0)
+        
+        # Try inserting at each position from 1 to k
+        best_position = 0
+        best_cmax = float('inf')
+        best_schedule_obj = None
+        
+        for insert_pos in range(k):  # positions 1 to k (0-indexed: 0 to k-1)
+            # π'.INSERT(j*, l) - insert candidate at position l
+            temp_order = current_schedule[:insert_pos] + [candidate_task] + current_schedule[insert_pos:]
+            temp_schedule = schedule_from_task_order(job_list, temp_order)
+            
+            # if π'.INSERT(j*,l).Cₘₐₓ < π*.Cₘₐₓ
+            if temp_schedule.cmax < best_cmax:
+                best_cmax = temp_schedule.cmax
+                best_position = insert_pos
+                best_schedule_obj = temp_schedule
+        
+        # π* ← π'.INSERT(j*, l) with best l
+        current_schedule.insert(best_position, candidate_task)
+        
+        # W ← W \ {j*} (already removed by pop)
+        k += 1
+    
+    # Return final schedule
+    return schedule_from_task_order(job_list, current_schedule)
