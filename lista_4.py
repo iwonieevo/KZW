@@ -1,309 +1,131 @@
 from RandomNumberGenerator import RandomNumberGenerator
 from dataclasses import dataclass
-from typing import Iterator
+from typing import Iterator, Iterable
 # https://pypi.org/project/ansicolors/
 from colors import color
+import math
 
 
 @dataclass(frozen=True, kw_only=True, order=True)
 class Operation:
-    """Single operation: belongs to task j, runs on machine m for p time units."""
-    k: int          # operation index within the task (1-based)
-    j: int          # task index (1-based)
-    m: int          # machine index (1-based)
-    p: int          # processing time
-
-    def __str__(self) -> str:
-        return (
-            color(f"o({self.k})", fg="cyan") +
-            color(f"j={self.j}", fg="magenta") +
-            f" m={color(str(self.m), fg='yellow')} p={color(str(self.p), fg='orange')}"
-        )
-
-
-@dataclass(frozen=True, kw_only=True, order=True)
-class Task:
-    """A task is an ordered sequence of operations with a fixed technological route."""
+    k: int
     j: int
-    O: tuple[Operation, ...]
+    m: int
+    p: int
 
-    @property
-    def num_operations(self) -> int:
-        return len(self.O)
-
-    @property
-    def total_processing_time(self) -> int:
-        return sum(op.p for op in self.O)
-
+    def __post_init__(self) -> None:
+        if self.p <= 0:
+            raise ValueError("Processing time must be positive")
+    
     def __str__(self) -> str:
-        ops = "  ".join(
-            color(f"[m{op.m}|p={op.p}]", fg="orange")
-            for op in self.O
-        )
         return (
-            color(f"j={self.j}", fg="magenta", style="bold") +
-            f"  ops={color(str(self.num_operations), fg='cyan')}  " +
-            ops
+            "[" + color(f"[k={self.k}]", fg='red') +
+            color(f"[j={self.j}]", fg='orange') +
+            color(f"[m={self.m}]", fg='yellow') +
+            color(f"[p={self.p}]", fg='magenta') +"]"
         )
-
-
-@dataclass(frozen=True, kw_only=True)
-class JobList:
-    """Unscheduled collection of tasks."""
-    tasks: tuple[Task, ...]
-
-    @property
-    def n(self) -> int:
-        return len(self.tasks)
-
-    @property
-    def machines(self) -> frozenset[int]:
-        return frozenset(op.m for t in self.tasks for op in t.O)
-
-    @property
-    def m(self) -> int:
-        return len(self.machines)
-
-    def __iter__(self) -> Iterator[Task]:
-        return iter(self.tasks)
-
-    def __len__(self) -> int:
-        return self.n
-
-    def display(self) -> None:
-        """Pretty-print the task list (unscheduled view)."""
-        title = f"n={self.n}  m={self.m}  machines={sorted(self.machines)}"
-        print(color(title, fg="green", style="bold"))
-
-        # column widths
-        col_j   = max(3, max(len(str(t.j)) for t in self.tasks) + 1)
-        col_ops = max(4, max(len(str(t.num_operations)) for t in self.tasks) + 1)
-        col_sum = max(5, max(len(str(t.total_processing_time)) for t in self.tasks) + 1)
-
-        sep = color(" | ", fg="cyan")
-        div_base = f"-+-".join(["-" * col_j, "-" * col_ops, "-" * col_sum])
-
-        print(sep.join([
-            color(f"{'j':^{col_j}}", fg="magenta", style="bold"),
-            color(f"{'ops':^{col_ops}}", fg="cyan", style="bold"),
-            color(f"{'Σp':^{col_sum}}", fg="red", style="bold"),
-            color("route  (machine → p)", fg="yellow", style="bold"),
-        ]))
-        print(color(div_base + "-+---------------------------", fg="cyan"))
-
-        for t in self.tasks:
-            route = "  →  ".join(
-                color(f"M{op.m}", fg="yellow") + color(f"({op.p})", fg="orange")
-                for op in t.O
-            )
-            print(sep.join([
-                color(f"{t.j:^{col_j}}", fg="magenta"),
-                color(f"{t.num_operations:^{col_ops}}", fg="cyan"),
-                color(f"{t.total_processing_time:^{col_sum}}", fg="red"),
-                route,
-            ]))
-
-
+    
 @dataclass(frozen=True, kw_only=True, order=True)
-class ScheduledOperation:
-    """An operation placed on the time-line."""
-    operation: Operation
-    start:     int
+class ScheduledOperation(Operation):
+    start: int
 
-    @property
-    def m(self) -> int:
-        return self.operation.m
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        if self.start < 0:
+            raise ValueError("Start must be non-negative")
+        
+    def __str__(self) -> str:
+        return super().__str__() + color(f" @ Start={self.start}", fg='green')
 
-    @property
-    def j(self) -> int:
-        return self.operation.j
-
-    @property
-    def p(self) -> int:
-        return self.operation.p
+    @classmethod 
+    def from_operation(cls, operation: Operation, start: int) -> "ScheduledOperation":
+        return cls(k=operation.k,j=operation.j,m=operation.m,p=operation.p,start=start)
     
     @property
     def end(self) -> int:
-        return self.start + self.operation.p
+        return self.start + self.p
+    
 
-
-@dataclass
+@dataclass(frozen=True)
 class Schedule:
-    """
-    Holds a feasible (or candidate) schedule for the Job Shop.
+    scheduled_operations: tuple[ScheduledOperation, ...]
 
-    Parameters
-    ----------
-    job_list : JobList
-        The original unscheduled jobs.
-    scheduled_ops : list[ScheduledOperation]
-        All operations placed on the timeline.  The constructor validates
-        basic consistency and computes Cmax.
-    """
-    job_list:       JobList
-    scheduled_ops:  list[ScheduledOperation]
+    @classmethod
+    def from_operations(cls, operations: Iterable[Operation]) -> "Schedule":
+        sched_ops: list[ScheduledOperation] = []
+        m_ops: dict[int, ScheduledOperation] = {}
+        
+        for operation in operations:
+            prev_m_op = m_ops.get(operation.m)
+            curr_op = ScheduledOperation.from_operation(
+                operation, 
+                prev_m_op.end if prev_m_op else 0
+            )
+            m_ops[operation.m] = curr_op
+            sched_ops.append(curr_op)
 
-    def __post_init__(self) -> None:
-        self._validate()
-        self._cmax: int = max(so.end for so in self.scheduled_ops) if self.scheduled_ops else 0
+        return cls(scheduled_operations=tuple(sched_ops))
 
-
-    def _validate(self) -> None:
-        """Light-weight feasibility checks."""
-        # no negative starts
-        for so in self.scheduled_ops:
-            if so.start < 0:
-                raise ValueError(f"Negative start time for {so}")
-            if so.end != so.start + so.p:
-                raise ValueError(f"end != start+p for {so}")
-
-        # machine non-overlap
-        by_machine: dict[int, list[ScheduledOperation]] = {}
-        for so in self.scheduled_ops:
-            by_machine.setdefault(so.m, []).append(so)
-
-        for m, ops in by_machine.items():
-            ops_sorted = sorted(ops, key=lambda x: x.start)
-            for a, b in zip(ops_sorted, ops_sorted[1:]):
-                if b.start < a.end:
-                    raise ValueError(
-                        f"Machine {m} overlap: job {a.j} ends at {a.end}, "
-                        f"job {b.j} starts at {b.start}"
-                    )
-
-        by_task: dict[int, list[ScheduledOperation]] = {}
-        for so in self.scheduled_ops:
-            by_task.setdefault(so.j, []).append(so)
-
-        for task in self.job_list:
-            ops = by_task.get(task.j, [])
-            ops_sorted = sorted(ops, key=lambda x: x.operation.k)
-            for a, b in zip(ops_sorted, ops_sorted[1:]):
-                if b.start < a.end:
-                    raise ValueError(
-                        f"Technological order violated for task {task.j}: "
-                        f"op {a.operation.k} ends at {a.end}, "
-                        f"op {b.operation.k} starts at {b.start}"
-                    )
-
+    def __len__(self) -> int:
+        return len(self.scheduled_operations)
+    
+    def __iter__(self) -> Iterator[Operation]:
+        return iter(self.scheduled_operations)
+    
+    @property
+    def machines(self) -> list[int]:
+        return list(set([o.m for o in self.scheduled_operations]))
 
     @property
-    def cmax(self) -> int:
-        return self._cmax
-
-
-    def _ops_by_machine(self) -> dict[int, list[ScheduledOperation]]:
-        d: dict[int, list[ScheduledOperation]] = {}
-        for so in self.scheduled_ops:
-            d.setdefault(so.m, []).append(so)
-        for ops in d.values():
-            ops.sort(key=lambda x: x.start)
-        return d
-
+    def tasks(self) -> list[int]:
+        return list(set([o.j for o in self.scheduled_operations]))
+    
+    @property
+    def c_max(self) -> int:
+        return max(o.end for o in self.scheduled_operations) if self.scheduled_operations else 0
 
     def display(self) -> None:
-        """
-        Print the schedule grouped by machine.
-        For each machine: a sorted list of (start, end, task, duration, op-index).
-        Also prints a compact ASCII Gantt for a quick visual overview.
-        """
-        by_machine = self._ops_by_machine()
-        machines   = sorted(by_machine.keys())
+        pass
 
-        # column widths
-        w_m     = max(2, max(len(str(m)) for m in machines) + 1)
-        w_j     = max(2, max(len(str(so.j))     for so in self.scheduled_ops) + 1)
-        w_k     = max(2, max(len(str(so.operation.k)) for so in self.scheduled_ops) + 1)
-        w_p     = max(2, max(len(str(so.p))     for so in self.scheduled_ops) + 1)
-        w_time  = max(5, len(str(self.cmax)) + 2)
+def generate_random_operations(n, m, Z) -> list[Operation]:
+    randGen = RandomNumberGenerator(Z)
 
-        sep = color(" | ", fg="cyan")
+    ret: list[Operation] = []
+    p_list: list[list[int]] = [[]] * n
+    m_list: list[list[int]] = [[]] * n
+    o_list: list[int] = [0] * n
 
-        # header
-        headers = ["M", "j", "op", "p", "start", "end"]
-        widths  = [w_m, w_j, w_k, w_p, w_time, w_time]
-        fg_cols = ["yellow", "magenta", "cyan", "orange", "blue", "green"]
+    for j in range(n):
+        o_list[j] = randGen.nextInt(1, math.floor(m*1.2))
+        for k in range(o_list[j]):
+            p_list[j].append(randGen.nextInt(1,29))
 
-        print(color(f"Cmax = {self.cmax}", fg="red", style="bold"))
-        print()
-        print(sep.join(
-            color(f"{h:^{w}}", fg=f, style="bold")
-            for h, w, f in zip(headers, widths, fg_cols)
-        ))
-        div = color("-+-".join("-" * w for w in widths), fg="cyan")
-
-        for m in machines:
-            print(color("═" * (sum(widths) + 3 * (len(widths) - 1) + 2), fg="cyan"))
-            for so in by_machine[m]:
-                print(sep.join([
-                    color(f"{so.m:^{w_m}}",    fg="yellow"),
-                    color(f"{so.j:^{w_j}}",    fg="magenta"),
-                    color(f"{so.operation.k:^{w_k}}", fg="cyan"),
-                    color(f"{so.p:^{w_p}}",    fg="orange"),
-                    color(f"{so.start:^{w_time}}", fg="blue"),
-                    color(f"{so.end:^{w_time}}",   fg="green"),
-                ]))
-            print(div)
-
-        print()
-        self._display_gantt(by_machine, machines)
-
-    def _display_gantt(
-        self,
-        by_machine: dict[int, list[ScheduledOperation]],
-        machines:   list[int],
-        width:      int = 60,
-    ) -> None:
-        """Compact text Gantt chart scaled to `width` characters."""
-        scale = self.cmax / width if self.cmax else 1
-
-        label_w = max(len(f"M{m}") for m in machines) + 1
-        bar_colors = [
-            "magenta", "orange", "blue", "green",
-            "cyan", (200, 100, 255), (255, 200, 50), (50, 220, 180),
-        ]
-
-        print(color("GANTT", fg="white", style="bold+underline"))
-
-        # time ruler
-        ruler_marks = 5
-        step = max(1, self.cmax // ruler_marks)
-        ruler = " " * label_w + " "
-        ticks = list(range(0, self.cmax + 1, step))
-        positions: list[int] = []
-        for t in ticks:
-            pos = int(t / scale)
-            positions.append(pos)
-        # build ruler string
-        ruler_str = [" "] * width
-        for t, pos in zip(ticks, positions):
-            s = str(t)
-            for i, ch in enumerate(s):
-                if pos + i < width:
-                    ruler_str[pos + i] = ch
-        print(" " * (label_w + 1) + color("".join(ruler_str), fg="white"))
-        print(" " * (label_w + 1) + color("─" * width, fg="white"))
-
-        for m in machines:
-            bar = [" "] * width
-            col_bar = [""] * width
-
-            for so in by_machine[m]:
-                c = bar_colors[(so.j - 1) % len(bar_colors)]
-                l = int(so.start / scale)
-                r = max(l + 1, int(so.end / scale))
-                label = str(so.j)
-                for i in range(l, min(r, width)):
-                    bar[i] = label[0] if (i - l) < len(label) else "█"
-                    col_bar[i] = c  # type: ignore[assignment]
-
-            label_str = color(f"M{m:<{label_w - 1}}", fg="yellow", style="bold")
-            row = ""
-            for ch, c in zip(bar, col_bar):
-                if c:
-                    row += color(ch, fg=c)
-                else:
-                    row += color("·", fg=(80, 80, 80))
-            print(f"{label_str} {row}")
-
+    for j in range(n):
+        for k in range(o_list[j]):
+            m_list[j].append(randGen.nextInt(1,m))
     
+    for j in range(n):
+        for k in range(o_list[j]):
+            ret.append(
+                Operation(
+                    k=k+1,
+                    j=j+1,
+                    m=m_list[j][k],
+                    p=p_list[j][k]
+                )
+            )
+
+    return ret
+    
+
+if __name__ == '__main__':
+    operations = generate_random_operations(n=7, m=3, Z=1)
+    for operation in operations:
+        print(operation)
+
+    operations_schedule = Schedule.from_operations(operations)
+    print(operations_schedule.machines)
+    print(operations_schedule.tasks)
+    for scheduled_operation in operations_schedule:
+        print(scheduled_operation)
+    print(operations_schedule.c_max)
