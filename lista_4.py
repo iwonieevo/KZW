@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from typing import Iterator, Iterable
 # https://pypi.org/project/ansicolors/
 from colors import color
+# https://pypi.org/project/rgb-gradient/
+from rgb_gradient import get_linear_gradient
 import math
 
 
@@ -19,10 +21,10 @@ class Operation:
     
     def __str__(self) -> str:
         return (
-            "[" + color(f"[k={self.k}]", fg='red') +
-            color(f"[j={self.j}]", fg='orange') +
-            color(f"[m={self.m}]", fg='yellow') +
-            color(f"[p={self.p}]", fg='magenta') +"]"
+            "[" + color(f"[k={self.k}]", fg='#FF00A0') +
+            color(f"[j={self.j}]", fg='#00FFFF') +
+            color(f"[m={self.m}]", fg='#0040FF') +
+            color(f"[p={self.p}]", fg='#911eb4') +"]"
         )
     
 @dataclass(frozen=True, kw_only=True, order=True)
@@ -35,7 +37,7 @@ class ScheduledOperation(Operation):
             raise ValueError("Start must be non-negative")
         
     def __str__(self) -> str:
-        return super().__str__() + color(f" @ Start={self.start}", fg='green')
+        return super().__str__() + " @ [" + color(f"[Start={self.start}]", fg='#00FF00') + color(f"[End={self.end}]", fg='#FF8000') +"]"
 
     @classmethod 
     def from_operation(cls, operation: Operation, start: int) -> "ScheduledOperation":
@@ -54,14 +56,17 @@ class Schedule:
     def from_operations(cls, operations: Iterable[Operation]) -> "Schedule":
         sched_ops: list[ScheduledOperation] = []
         m_ops: dict[int, ScheduledOperation] = {}
+        j_ops: dict[int, ScheduledOperation] = {}
         
         for operation in operations:
             prev_m_op = m_ops.get(operation.m)
+            prev_j_op = j_ops.get(operation.j)
             curr_op = ScheduledOperation.from_operation(
                 operation, 
-                prev_m_op.end if prev_m_op else 0
+                max(prev_m_op.end if prev_m_op else 0, prev_j_op.end if prev_j_op else 0)
             )
             m_ops[operation.m] = curr_op
+            j_ops[operation.j] = curr_op
             sched_ops.append(curr_op)
 
         return cls(scheduled_operations=tuple(sched_ops))
@@ -85,7 +90,32 @@ class Schedule:
         return max(o.end for o in self.scheduled_operations) if self.scheduled_operations else 0
 
     def display(self) -> None:
-        pass
+            if not self.scheduled_operations:
+                return
+
+            tasks = sorted(self.tasks)
+            machines = sorted(self.machines)
+
+            print()
+            print(color(f" OPERATIONS BY MACHINE ".center(50, '='), bg='#a9a9a9', fg='black', style='bold'))
+            for m in machines:
+                ops = sorted([o for o in self.scheduled_operations if o.m == m], key=lambda x: x.start)
+                
+                print(color(f" MACHINE {m} ".center(30, '-'), fg='black', bg='#d3d3d3'))
+                for op in ops:
+                    print(op)
+
+            print()
+            print(color(f" OPERATIONS BY TASK ".center(50, '='), bg='#a9a9a9', fg='black', style='bold'))
+            for t in tasks:
+                ops = sorted([o for o in self.scheduled_operations if o.j == t], key=lambda x: x.start)
+                
+                print(color(f" TASK {t} ".center(30, '-'), fg='black', bg='#d3d3d3'))
+                for op in ops:
+                    print(op)
+            
+            print(f"\n{color(f"C_max: {self.c_max}", fg='white', bg='#e6194B', style='bold')}\n")
+
 
 def generate_random_operations(n, m, Z) -> list[Operation]:
     randGen = RandomNumberGenerator(Z)
@@ -119,13 +149,8 @@ def generate_random_operations(n, m, Z) -> list[Operation]:
     
 
 if __name__ == '__main__':
-    operations = generate_random_operations(n=7, m=3, Z=1)
-    for operation in operations:
-        print(operation)
+    operations = generate_random_operations(n=11, m=7, Z=1)
 
+    print(color(f" Schedule #1: Original Task Order ".center(60, '#'), bg="#ffc800", fg='black', style='bold'))
     operations_schedule = Schedule.from_operations(operations)
-    print(operations_schedule.machines)
-    print(operations_schedule.tasks)
-    for scheduled_operation in operations_schedule:
-        print(scheduled_operation)
-    print(operations_schedule.c_max)
+    operations_schedule.display()
