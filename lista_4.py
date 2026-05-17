@@ -157,24 +157,24 @@ def insa(operations: Iterable[Operation], reinsert: Literal[None, 1, 2, 3, 4] = 
     pi: tuple[Operation, ...] = ()
     W: deque = deque(sorted(Schedule.from_operations(tuple(operations)).jobs, key=lambda j: sum(o.p for o in operations if o.j == j), reverse=True))
 
-    # TODO: correct this func so it looks for best insertion for the job (not greedily for the operation)
     def insert_job(job: int):
         nonlocal pi_star_schedule, pi
-        min_pos = 0
-        for operation in sorted((o for o in operations if o.j == job), key=lambda o: o.k):
-            pi_star_schedule = Schedule.from_operations(pi + (operation,))
+        job_ops = tuple(sorted((o for o in operations if o.j == job), key=lambda o: o.k))
+        
+        pi_star_schedule = Schedule.from_operations(pi + job_ops)
+        best_pi = pi + job_ops
 
-            for i in range(min_pos, len(pi)):
-                new_pi = pi[:i] + (operation,) + pi[i:]
-                try:
-                    new_pi_schedule = Schedule.from_operations(new_pi)
-                    if not pi_star_schedule.scheduled_operations or new_pi_schedule.c_max < pi_star_schedule.c_max:
-                        pi_star_schedule = new_pi_schedule
-                        min_pos = i + 1
-                except ValueError:
-                    continue
-            
-            pi = pi_star_schedule.scheduled_operations
+        for i in range(len(pi)):
+            new_pi = pi[:i] + job_ops + pi[i:]
+            try:
+                new_pi_schedule = Schedule.from_operations(new_pi)
+                if new_pi_schedule.c_max < pi_star_schedule.c_max:
+                    pi_star_schedule = new_pi_schedule
+                    best_pi = new_pi
+            except ValueError:
+                continue
+
+        pi = best_pi
 
     while W:
         job = W.popleft()
