@@ -1,13 +1,14 @@
 from RandomNumberGenerator import RandomNumberGenerator
 from dataclasses import dataclass
 from collections import deque
+from itertools import combinations
 from typing import Iterator, Iterable, Literal
 # https://pypi.org/project/ansicolors/
 from colors import color
 import math
 
 
-@dataclass(frozen=True, kw_only=True, order=True)
+@dataclass(frozen=True, slots=True, order=True)
 class Operation:
     k: int
     j: int
@@ -26,7 +27,7 @@ class Operation:
             color(f"[p={self.p}]", fg='#911eb4') +"]"
         )
     
-@dataclass(frozen=True, kw_only=True, order=True)
+@dataclass(frozen=True, slots=True, order=True)
 class ScheduledOperation(Operation):
     start: int
 
@@ -47,29 +48,29 @@ class ScheduledOperation(Operation):
         return self.start + self.p
     
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Schedule:
     scheduled_operations: tuple[ScheduledOperation, ...]
 
     @classmethod
     def from_operations(cls, operations: Iterable[Operation]) -> "Schedule":
         sched_ops: list[ScheduledOperation] = []
-        m_ops: dict[int, ScheduledOperation] = {}
-        j_ops: dict[int, ScheduledOperation] = {}
+        m_ops_ends: dict[int, int] = {} # machine -> end time of last task
+        j_ops: dict[int, tuple[int, int]] = {} # job -> (end time, k) of last task 
         
         for operation in operations:
-            prev_m_op = m_ops.get(operation.m)
-            prev_j_op = j_ops.get(operation.j)
-            curr_op = ScheduledOperation.from_operation(
-                operation, 
-                max(prev_m_op.end if prev_m_op else 0, prev_j_op.end if prev_j_op else 0)
-            )
+            prev_j_op_end, prev_j_op_k = j_ops.get(operation.j, (0, 0))
 
-            if prev_j_op and prev_j_op.k > curr_op.k:
+            if prev_j_op_k > operation.k:
                 raise ValueError(f"Technological order of J{operation.j} was not maintained.")
             
-            m_ops[operation.m] = curr_op
-            j_ops[operation.j] = curr_op
+            curr_op = ScheduledOperation.from_operation(
+                operation, 
+                max(m_ops_ends.get(operation.m, 0), prev_j_op_end)
+            )
+            
+            m_ops_ends[operation.m] = curr_op.end
+            j_ops[operation.j] = (curr_op.end, curr_op.k)
             sched_ops.append(curr_op)
 
         return cls(scheduled_operations=tuple(sched_ops))
@@ -155,26 +156,27 @@ def generate_random_operations(n, m, Z) -> list[Operation]:
 def insa(operations: Iterable[Operation], reinsert: Literal[None, 1, 2, 3, 4] = None) -> Schedule:
     pi_star_schedule = Schedule(())
     pi: tuple[Operation, ...] = ()
-    W: deque = deque(sorted(Schedule.from_operations(tuple(operations)).jobs, key=lambda j: sum(o.p for o in operations if o.j == j), reverse=True))
 
     def insert_job(job: int):
         nonlocal pi_star_schedule, pi
         job_ops = tuple(sorted((o for o in operations if o.j == job), key=lambda o: o.k))
-        
+        all_positions = range(len(pi) + len(job_ops))
         pi_star_schedule = Schedule.from_operations(pi + job_ops)
-        best_pi = pi + job_ops
 
-        for i in range(len(pi)):
-            new_pi = pi[:i] + job_ops + pi[i:]
+        for insert_positions in combinations(all_positions, len(job_ops)):
+            pi_iter = iter(pi)
+            job_ops_iter = iter(job_ops)
+            new_pi = (next(job_ops_iter) if pos in insert_positions else next(pi_iter) for pos in all_positions)
             try:
                 new_pi_schedule = Schedule.from_operations(new_pi)
                 if new_pi_schedule.c_max < pi_star_schedule.c_max:
                     pi_star_schedule = new_pi_schedule
-                    best_pi = new_pi
             except ValueError:
                 continue
 
-        pi = best_pi
+        pi = pi_star_schedule.scheduled_operations
+
+    W: deque = deque(sorted(Schedule.from_operations(tuple(operations)).jobs, key=lambda j: sum(o.p for o in operations if o.j == j), reverse=True))
 
     while W:
         job = W.popleft()
@@ -185,7 +187,7 @@ def insa(operations: Iterable[Operation], reinsert: Literal[None, 1, 2, 3, 4] = 
 
         match reinsert:
             case 1|2|3:
-                raise NotImplementedError("TODO: implement missing methods")
+                raise NotImplementedError("TODO: implement other choosing strategies (for job re-inserts)")
             case 4:
                 x_c_max = float('inf')
                 for candidate in already_scheduled:
@@ -208,7 +210,7 @@ def insa(operations: Iterable[Operation], reinsert: Literal[None, 1, 2, 3, 4] = 
     
 
 if __name__ == '__main__':
-    operations = generate_random_operations(n=11, m=7, Z=1)
+    operations = generate_random_operations(n=6, m=7, Z=1)
 
     print(color(f" Schedule #1: Original Operations Order ".center(70, '#'), bg="#ffc800", fg='black', style='bold'))
     operations_schedule = Schedule.from_operations(operations)
@@ -219,6 +221,6 @@ if __name__ == '__main__':
     insa_schedule = insa(operations, reinsert=None)
     insa_schedule.display(group_by='machine', show_c_max=True)
 
-    print(color(f" Schedule #3: INSA Operations Order (reinsert [4]) ".center(70, '#'), bg="#ffc800", fg='black', style='bold'))
+    print(color(f" Schedule #3: INSA Operations Order (reinsert strategy #4) ".center(70, '#'), bg="#ffc800", fg='black', style='bold'))
     insa_schedule = insa(operations, reinsert=4)
     insa_schedule.display(group_by='machine', show_c_max=True)
