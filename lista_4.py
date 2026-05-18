@@ -153,12 +153,13 @@ def generate_random_operations(n, m, Z) -> list[Operation]:
 
     return ret
 
-def insa(operations: Iterable[Operation], reinsert: Literal[None, 1, 2, 3, 4] = None) -> Schedule:
+def insa(operations: Iterable[Operation]) -> Schedule:
     pi_star_schedule = Schedule(())
     pi: tuple[Operation, ...] = ()
+    W: deque = deque(sorted(Schedule.from_operations(tuple(operations)).jobs, key=lambda j: sum(o.p for o in operations if o.j == j), reverse=True))
 
-    def insert_job(job: int):
-        nonlocal pi_star_schedule, pi
+    while W:
+        job = W.popleft()
         job_ops = tuple(sorted((o for o in operations if o.j == job), key=lambda o: o.k))
         all_positions = range(len(pi) + len(job_ops))
         pi_star_schedule = Schedule.from_operations(pi + job_ops)
@@ -167,44 +168,11 @@ def insa(operations: Iterable[Operation], reinsert: Literal[None, 1, 2, 3, 4] = 
             pi_iter = iter(pi)
             job_ops_iter = iter(job_ops)
             new_pi = (next(job_ops_iter) if pos in insert_positions else next(pi_iter) for pos in all_positions)
-            try:
-                new_pi_schedule = Schedule.from_operations(new_pi)
-                if new_pi_schedule.c_max < pi_star_schedule.c_max:
-                    pi_star_schedule = new_pi_schedule
-            except ValueError:
-                continue
+            new_pi_schedule = Schedule.from_operations(new_pi)
+            if new_pi_schedule.c_max < pi_star_schedule.c_max:
+                pi_star_schedule = new_pi_schedule
 
         pi = pi_star_schedule.scheduled_operations
-
-    W: deque = deque(sorted(Schedule.from_operations(tuple(operations)).jobs, key=lambda j: sum(o.p for o in operations if o.j == j), reverse=True))
-
-    while W:
-        job = W.popleft()
-        insert_job(job)
-
-        already_scheduled = set(o.j for o in pi) - {job}
-        x = None
-
-        match reinsert:
-            case 1|2|3:
-                raise NotImplementedError("TODO: implement other choosing strategies (for job re-inserts)")
-            case 4:
-                x_c_max = float('inf')
-                for candidate in already_scheduled:
-                    new_pi = tuple(o for o in pi if o.j != candidate)
-                    try:
-                        new_c_max = Schedule.from_operations(new_pi).c_max
-                        if new_c_max < x_c_max:
-                            x_c_max = new_c_max
-                            x = candidate
-                    except ValueError:
-                        continue
-            case _:
-                continue
-        
-        if x is not None:
-            pi = tuple(o for o in pi if o.j != x)
-            insert_job(x)
 
     return pi_star_schedule
     
@@ -218,9 +186,5 @@ if __name__ == '__main__':
     operations_schedule.display(group_by='machine', show_c_max=True)
 
     print(color(f" Schedule #2: INSA Operations Order (no reinsert) ".center(70, '#'), bg="#ffc800", fg='black', style='bold'))
-    insa_schedule = insa(operations, reinsert=None)
-    insa_schedule.display(group_by='machine', show_c_max=True)
-
-    print(color(f" Schedule #3: INSA Operations Order (reinsert strategy #4) ".center(70, '#'), bg="#ffc800", fg='black', style='bold'))
-    insa_schedule = insa(operations, reinsert=4)
+    insa_schedule = insa(operations)
     insa_schedule.display(group_by='machine', show_c_max=True)
